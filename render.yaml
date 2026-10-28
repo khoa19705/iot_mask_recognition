@@ -1,0 +1,13 @@
+# Use this file from the mask_detect repository root.
+services:
+  - type: web
+    name: masklens-lab3
+    runtime: docker
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: cloud
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: MAX_UPLOAD_MB
+        value: "8"

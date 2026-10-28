@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7f4">
+  <title>MaskLens — Nhận diện trực tiếp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='6') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="MaskLens"><span class="brand-mark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12.2c0-1.1.9-2 2-2h18c1.1 0 2 .9 2 2v7.1c0 1.1-.9 2-2 2h-3.1l-2.6 3.2c-.7.8-1.9.8-2.6 0L13 21.3H7c-1.1 0-2-.9-2-2v-7.1Z" fill="currentColor"/><path d="M11 15.4h10M13 18h6" stroke="#effaf3" stroke-width="1.8" stroke-linecap="round"/></svg></span><span class="brand-name">mask<span>lens</span></span></a>
+      <div class="model-indicator"><span id="model-dot" class="status-dot"></span><span id="model-status">Đang kiểm tra model</span></div>
+    </header>
+
+    <section class="intro">
+      <div class="eyebrow"><span></span> YOLO · NHẬN DIỆN TRỰC TIẾP</div>
+      <h1>Mask detection<span>.</span></h1>
+      <p>Bật webcam để nhận diện khẩu trang ngay trên hình ảnh trực tiếp.</p>
+    </section>
+
+    <section class="dashboard">
+      <div class="camera-card">
+        <div class="card-heading">
+          <div><div class="overline">CAMERA</div><h2>Webcam trực tiếp</h2></div>
+          <div id="live-indicator" class="live-indicator"><i></i><span>ĐANG TẮT</span></div>
+        </div>
+        <div id="camera-stage" class="camera-stage">
+          <video id="camera-video" autoplay muted playsinline></video>
+          <canvas id="overlay-canvas" aria-label="Khung nhận diện khẩu trang"></canvas>
+          <canvas id="capture-canvas" hidden></canvas>
+          <div id="camera-placeholder" class="camera-placeholder">
+            <div class="camera-icon"><svg viewBox="0 0 48 48"><rect x="5" y="12" width="27" height="24" rx="5"/><path d="m32 20 11-6v20l-11-6"/></svg></div>
+            <strong>Webcam đang tắt</strong>
+            <span>Bật camera để bắt đầu nhận diện.</span>
+          </div>
+          <div class="camera-corner top-left"></div><div class="camera-corner top-right"></div>
+          <div class="camera-corner bottom-left"></div><div class="camera-corner bottom-right"></div>
+          <div id="frame-status" class="frame-status">CHỜ CAMERA</div>
+        </div>
+        <div class="camera-toolbar">
+          <div class="confidence-control"><label for="confidence">Ngưỡng tin cậy <strong id="confidence-value">35%</strong></label><input id="confidence" type="range" min="5" max="95" value="35"></div>
+          <div class="camera-actions"><span id="activity-text" class="activity-text">Cho phép trình duyệt truy cập camera khi được hỏi.</span><button id="toggle-camera" class="primary-button" type="button"><span class="button-icon">◉</span><span id="button-label">Bật webcam</span></button></div>
+        </div>
+      </div>
+
+      <section class="latency-card" aria-labelledby="latency-title">
+        <div class="latency-heading"><div><div class="overline">LAB 3 · ĐO HIỆU NĂNG</div><h2 id="latency-title">Thời gian xử lý</h2></div><span id="execution-environment">Đang kiểm tra máy chủ</span></div>
+        <p id="model-details">Đang đọc thông tin model…</p>
+        <div class="timing-scroll"><table class="timing-table">
+          <thead><tr><th scope="col">Chỉ số</th><th scope="col">Hiện tại</th><th scope="col">Trung bình</th><th scope="col">P95</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Suy luận máy chủ</th><td id="metric-inference_ms">—</td><td id="avg-inference_ms">—</td><td id="p95-inference_ms">—</td></tr>
+            <tr><th scope="row">Phản hồi local ↔ máy chủ</th><td id="metric-response_ms">—</td><td id="avg-response_ms">—</td><td id="p95-response_ms">—</td></tr>
+            <tr><th scope="row">Toàn trình đến hiển thị (ước lượng)</th><td id="metric-end_to_end_ms">—</td><td id="avg-end_to_end_ms">—</td><td id="p95-end_to_end_ms">—</td></tr>
+          </tbody>
+        </table></div>
+        <p id="metric-count">0 mẫu</p><p id="metric-phase"></p>
+        <p class="timing-note">Suy luận gồm tiền xử lý, chạy YOLO và hậu xử lý; tách riêng nạp model. Phản hồi gồm truyền ảnh và xử lý máy chủ. Toàn trình tính từ lấy ảnh đến cơ hội trình duyệt vẽ kết quả, không gồm 600 ms nghỉ giữa hai lần lấy ảnh.</p>
+        <div class="metrics-actions"><button id="download-metrics" class="download-button" type="button" disabled>Tải số liệu CSV</button><button id="reset-metrics" class="download-button" type="button">Phiên đo mới</button></div>
+        <p class="timing-note">Lưu tối đa 10.000 mẫu gần nhất trong tab này. Tải CSV trước khi đóng hoặc tải lại trang. Giữ tab hiển thị khi đo.</p>
+      </section>
+
+      <aside class="side-column">
+        <section class="stats-card">
+          <div class="card-heading compact"><div><div class="overline">KHUNG HÌNH HIỆN TẠI</div><h2>Kết quả nhận diện</h2></div><span id="frame-time" class="frame-time">—</span></div>
+          <div class="total-count"><strong id="sum-total">0</strong><span>đối tượng<br>được nhận diện</span></div>
+          <div class="class-list">
+            <div class="class-row"><span class="class-dot mask"></span><span>Đeo khẩu trang</span><strong id="sum-mask">0</strong></div>
+            <div class="class-row"><span class="class-dot no-mask"></span><span>Không đeo</span><strong id="sum-no-mask">0</strong></div>
+            <div class="class-row"><span class="class-dot incorrect"></span><span>Đeo chưa đúng</span><strong id="sum-incorrect">0</strong></div>
+          </div>
+        </section>
+
+        <section class="logs-card">
+          <div class="logs-heading"><div><div class="overline">LỊCH SỬ</div><h2>Log phát hiện</h2></div><a class="download-button" href="/api/logs/download" title="Tải log JSONL">↓ Tải log</a></div>
+          <div class="log-meta"><span><i></i> Được lưu tự động</span><strong id="log-total">0 sự kiện</strong></div>
+          <div id="log-list" class="log-list"><div class="empty-logs">Chưa có sự kiện nào được ghi nhận.</div></div>
+          <div class="log-footnote">Log được lưu tại <code>logs/detections.jsonl</code> trên máy chủ.</div>
+        </section>
+      </aside>
+    </section>
+
+    <footer><span>MASKLENS <b>·</b> YOLO VISION</span><span>Khung nhận diện hiển thị trực tiếp trên webcam</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="{{ url_for('static', filename='js/metrics.js', v='1') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js', v='5') }}"></script>
+</body>
+</html>
