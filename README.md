@@ -7,10 +7,12 @@ Xem [hướng dẫn Lab 3](LAB3.md) để chạy, triển khai và lấy số li
 
 ### Triển khai repo này lên Render
 
-Repository đã chứa `best.pt` cùng Dockerfile tại gốc. Chọn **Web Service**, kết nối repository `khoa19705/iot_mask_recognition`, chọn nhánh `codex/lab3-cloud`, dùng runtime **Docker** và để trống **Root Directory**.
+Repository đã chứa `best.onnx` cùng Dockerfile tại gốc. Docker dùng ONNX Runtime, không cài/nạp PyTorch; chạy một luồng CPU và ảnh suy luận 320 px để giảm tải. Chọn **Web Service**, kết nối repository `khoa19705/iot_mask_recognition`, chọn nhánh `codex/lab3-cloud`, dùng runtime **Docker** và để trống **Root Directory**.
 Đặt biến môi trường `APP_ENV=cloud`, `FLASK_DEBUG=0`, `MAX_UPLOAD_MB=8`; health check `/api/health`.
 Không cần nhập Build Command/Start Command khi dùng Dockerfile, cũng không cần `MODEL_URL` vì trọng số đã có trong repository.
-Chọn cấu hình RAM phù hợp với PyTorch/model; kiểm tra giá và tài nguyên trên màn hình Render trước khi tạo dịch vụ. Không có gói trả phí nào được tự đăng ký.
+Không đặt `MASK_MODEL_PATH=best.pt` trên Render: Docker mới dùng mặc định `best.onnx`. Nếu đã đặt biến này, sửa thành `best.onnx`. Không có gói trả phí nào được tự đăng ký. Gói 0,1 CPU vẫn có thể xử lý chậm; bản tối ưu chưa đảm bảo realtime hoặc đủ RAM trên mọi máy chủ.
+
+Chỉ bật nhận diện ở một tab. Nếu có yêu cầu nhận diện đồng thời, API trả 429 để không xếp hàng làm nghẽn health check. Ảnh gửi tối đa rộng 640 px, JPEG 70%; ảnh đưa vào model 320 px có thể giảm nhận diện khuôn mặt nhỏ.
 
 Ứng dụng Flask dùng Ultralytics YOLO để nhận diện khẩu trang trực tiếp trên một webcam. Khung bounding box được vẽ đè lên video đang chạy; không tải ảnh/video và không mở camera kết quả thứ hai.
 
@@ -49,4 +51,4 @@ PORT=5000
 FLASK_DEBUG=0
 ```
 
-Chỉ bật `FLASK_DEBUG=1` trong môi trường phát triển cục bộ. Trọng số `best.pt` được đưa vào Git để Cloud build có sẵn model. Các trọng số `.pt` khác, `.env` và log JSONL được loại khỏi Git qua `.gitignore`.
+Chỉ bật `FLASK_DEBUG=1` trong môi trường phát triển cục bộ. `best.pt` dành cho local/huấn luyện và `best.onnx` dành cho Cloud có sẵn trong Git. Docker loại `best.pt` khỏi image. Các trọng số `.pt` khác, `.env` và log JSONL được loại khỏi Git qua `.gitignore`.

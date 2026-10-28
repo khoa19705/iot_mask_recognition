@@ -1,5 +1,7 @@
 .git
 .venv
+.venv-cloud
+best.pt
 __pycache__
 **/__pycache__
 .env

@@ -163,11 +163,11 @@
       const sourceWidth = video.videoWidth;
       const sourceHeight = video.videoHeight;
       if (!sourceWidth || !sourceHeight) throw new Error("Camera chưa gửi được hình ảnh.");
-      const scale = Math.min(1, 960 / sourceWidth);
+      const scale = Math.min(1, 640 / sourceWidth);
       captureCanvas.width = Math.round(sourceWidth * scale);
       captureCanvas.height = Math.round(sourceHeight * scale);
       captureCanvas.getContext("2d").drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-      const blob = await new Promise(resolve => captureCanvas.toBlob(resolve, "image/jpeg", 0.82));
+      const blob = await new Promise(resolve => captureCanvas.toBlob(resolve, "image/jpeg", 0.7));
       if (!blob || !running || generation !== cameraGeneration) return;
       const body = new FormData();
       body.append("file", blob, "webcam.jpg");
@@ -175,6 +175,7 @@
       const sentAt = performance.now();
       controller = new AbortController();
       timeout = setTimeout(() => controller?.abort(), 120000);
+      setActivity("Đang chờ máy chủ xử lý ảnh…");
       const result = await readJson(await fetch("/api/detect", { method: "POST", body, signal: controller.signal }));
       const receivedAt = performance.now();
       clearTimeout(timeout);
@@ -190,6 +191,7 @@
       const row = metrics.add({
         ...result.timing,
         timestamp: new Date().toISOString(), environment: result.environment,
+        backend: result.backend, input_size: result.input_size, upload_bytes: blob.size,
         width: result.width, height: result.height,
         confidence_threshold: Number(body.get("confidence")), objects: result.summary.total,
         response_ms: receivedAt - sentAt,
@@ -207,7 +209,7 @@
       clearTimeout(timeout);
       controller = null;
       requestPending = false;
-      if (running) nextFrameTimer = setTimeout(analyzeNextFrame, 600);
+      if (running) nextFrameTimer = setTimeout(analyzeNextFrame, 150);
     }
   }
   async function startCamera() {
@@ -266,7 +268,7 @@
     else { dot.classList.add("error"); $("#model-status").textContent = "Chưa tìm thấy model YOLO"; }
   }).catch(() => { $("#model-dot").classList.add("error"); $("#model-status").textContent = "Không kết nối được máy chủ"; });
   fetch("/api/model").then(readJson).then(info => {
-    $("#model-details").textContent = `${info.labels.join(" · ")} | ${(info.parameters / 1e6).toFixed(1)} triệu tham số`;
+    $("#model-details").textContent = `${info.labels.join(" · ")} | ${(info.parameters / 1e6).toFixed(1)} triệu tham số | ${info.backend || "YOLO"} · ${info.input_size || 640}px`;
     $("#model-status").textContent = info.three_classes_ready ? "YOLO đủ 3 nhóm khẩu trang" : "Model chưa đủ 3 nhóm khẩu trang";
   }).catch(error => { $("#model-details").textContent = error.message; });
 })();

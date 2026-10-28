@@ -1,2 +1,6 @@
--r requirements.txt
+Flask>=3.0,<4.0
+python-dotenv>=1.0,<2.0
+opencv-python-headless>=4.10,<5.0
+numpy>=1.26,<3.0
+onnxruntime>=1.20,<2.0
 gunicorn>=23,<24

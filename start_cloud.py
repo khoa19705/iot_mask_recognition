@@ -45,5 +45,5 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "10000"))
     # A single worker keeps model memory and event-log locks in one process.
     command = [sys.executable, "-m", "gunicorn", "--bind", f"0.0.0.0:{port}",
-               "--workers", "1", "--threads", "4", "--timeout", "180", "app:app"]
+               "--workers", "1", "--threads", "2", "--timeout", "180", "app:app"]
     raise SystemExit(subprocess.call(command))

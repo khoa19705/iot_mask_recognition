@@ -15,7 +15,7 @@ Không cần thêm ESP32-CAM cho bản dùng webcam này.
 
 | Trường CSV | Điểm bắt đầu và kết thúc |
 | --- | --- |
-| `inference_ms` | Máy chủ: ngay trước `model.predict()` đến khi predict hoàn tất. Bao gồm tiền xử lý, suy luận và hậu xử lý của YOLO; mẫu đầu có thể gồm khởi tạo predictor. |
+| `inference_ms` | Máy chủ: từ trước predict đến khi hoàn tất. Gồm resize/letterbox, suy luận YOLO và hậu xử lý/NMS. Cloud dùng ONNX Runtime; local mặc định dùng PyTorch. |
 | `response_ms` | Trình duyệt: trước gọi fetch đến khi đọc và phân tích xong JSON. Gồm truyền ảnh, thời gian máy chủ, nhận kết quả. Không phải ping hoặc độ trễ mạng thuần. |
 | `end_to_end_ms` | Trình duyệt: trước lấy ảnh từ video đến sau cập nhật kết quả và hai callback requestAnimationFrame. Đây là ước lượng cơ hội vẽ lên màn hình, không đo màn hình vật lý hoặc độ trễ cảm biến webcam. |
 | `server_ms` | Trong route Flask: đọc request, giải mã ảnh, chờ khóa, nạp model nếu cần, predict, đóng gói detections và ghi log. Không gồm toàn bộ serialization JSON, proxy hoặc thời gian mạng. |
@@ -27,7 +27,7 @@ Không cần thêm ESP32-CAM cho bản dùng webcam này.
 Thời gian trên máy chủ và trình duyệt đều đo bằng đồng hồ đơn điệu của chính máy đó.
 Không trừ timestamp của hai máy; không yêu cầu đồng bộ đồng hồ để tính các khoảng thời gian này.
 P95 dùng nearest rank: phần tử thứ `ceil(0.95*N)` trong dãy tăng dần.
-Khoảng nghỉ 600 ms giữa các yêu cầu không nằm trong độ trễ một ảnh. Không suy ra FPS video từ `1000 / inference_ms`.
+Khoảng nghỉ 150 ms giữa các yêu cầu không nằm trong độ trễ một ảnh. Không suy ra FPS video từ `1000 / inference_ms`.
 Chuyển tab nền sẽ tạm dừng lấy mẫu; mẫu đang xử lý khi tab ẩn không đưa vào thống kê.
 Tối đa 10.000 mẫu gần nhất được giữ trong RAM của tab. CSV không tự lưu lên Cloud và sẽ mất nếu tải lại trang.
 
@@ -46,9 +46,9 @@ Không đưa `.env` lên Git. `.env.example` chứa cấu hình mẫu.
 
 ## Triển khai Docker
 
-Docker chạy Linux với Gunicorn, một worker và bốn thread; khóa riêng tuần tự hóa YOLO.
+Docker chạy Linux với Gunicorn, một worker và hai thread; chỉ chấp nhận một yêu cầu suy luận cùng lúc. Yêu cầu trùng trả 429 để giữ thread phục vụ health check và giao diện.
 Một worker giúp không nhân bản bộ nhớ model và giữ log trong cùng tiến trình.
-File Docker cài PyTorch CPU từ nguồn chính thức. Các dependency vẫn dùng khoảng phiên bản trong requirements; lần build sau có thể lấy bản mới.
+File Docker chỉ cài ONNX Runtime, Flask, OpenCV headless và NumPy, không nạp PyTorch/Ultralytics. ONNX chạy một luồng, không spinning, không giữ CPU memory arena, dùng graph optimization basic để giảm đỉnh RAM. Các dependency vẫn dùng khoảng phiên bản trong requirements; lần build sau có thể lấy bản mới.
 
 Nếu máy có Docker, từ thư mục `mask_detect`:
 
@@ -71,19 +71,19 @@ Tài liệu chính thức:
 2. Nếu repo là `mask_detect`, dùng Dockerfile và `render.yaml` ngay gốc repo. Nếu repo là `Iot`, đặt Root Directory là `mask_detect`; Blueprint cũng cần trỏ đúng file trong thư mục đó.
 3. Đặt `APP_ENV=cloud`, `FLASK_DEBUG=0`, `MAX_UPLOAD_MB=8`; dịch vụ cung cấp `PORT`. Health check: `/api/health`.
 4. Cung cấp model bằng một trong hai cách:
-   - Build image từ bộ ZIP có `best.pt` rồi đưa image lên registry/dịch vụ hỗ trợ image. ZIP có sẵn model.
-   - Repo hiện tại đã chứa `best.pt` nên build từ Git dùng trực tiếp trọng số, không cần `MODEL_URL`. Nếu sau này tách trọng số khỏi Git, có thể đặt `MODEL_URL` HTTPS tải trực tiếp và `MODEL_SHA256`; script sẽ kiểm tra hash trước khi dùng.
+   - Build image từ bộ ZIP có `best.onnx` rồi đưa image lên registry/dịch vụ hỗ trợ image. ZIP có sẵn model.
+   - Repo chứa `best.onnx` nên build từ Git dùng trực tiếp trọng số, không cần `MODEL_URL`. Nếu sau này tách trọng số khỏi Git, có thể đặt `MODEL_URL` HTTPS tải trực tiếp và `MODEL_SHA256`; script sẽ kiểm tra hash trước khi dùng.
 5. Lấy SHA256 của trọng số:
 
 ```powershell
-(Get-FileHash -LiteralPath .\best.pt -Algorithm SHA256).Hash.ToLower()
+(Get-FileHash -LiteralPath .\best.onnx -Algorithm SHA256).Hash.ToLower()
 ```
 
 6. Sau deploy, mở URL HTTPS của Cloud. Trình duyệt vẫn dùng webcam laptop, ảnh được gửi tới máy chủ Cloud cùng origin. Đợi thông tin đủ 3 nhóm hiện lên rồi chạy thử.
 7. Kiểm tra `GET /api/model`: ba nhãn phải là `mask_weared_incorrect`, `with_mask`, `without_mask`; `three_classes_ready` phải true.
 
 Model hiện tại khoảng 52 MB và 25,9 triệu tham số. Chưa đủ bằng chứng để gọi đây là model nhẹ theo tiêu chí của giảng viên.
-Ứng dụng còn cần RAM cho PyTorch, mô hình và ảnh; cần chọn cấu hình theo mức dùng thực tế, không mặc định gói nhỏ nhất sẽ chạy được.
+Bản ONNX FP32 khoảng 103 MB trên đĩa nhưng bỏ được PyTorch khỏi RAM khi chạy Cloud. File lớn hơn trên đĩa không có nghĩa là dùng nhiều RAM hơn toàn bộ runtime PyTorch. Phải đo RAM thực tế trên Cloud, không mặc định gói nhỏ nhất sẽ chạy được.
 Nếu cần model nhỏ hơn, có thể huấn luyện lại bằng `train.py --model yolo11n.pt --data <dataset.yaml>`; hiện project chưa chứa dataset để tự huấn luyện hoặc đánh giá accuracy.
 
 Model chỉ được kiểm tra cấu trúc, tải và suy luận; cần thử ảnh thực tế để đánh giá độ chính xác.
@@ -95,7 +95,7 @@ Log phát hiện trên filesystem container có thể mất khi restart/redeploy
 1. Chạy local, ghi phiên bản model, cấu hình máy và độ phân giải ảnh gửi.
 2. Thử đeo đúng, không đeo, đeo chưa đúng; sau đó có nhiều người thuộc các nhóm khác nhau trong cùng khung hình. Ghi lại trường hợp sai, không chỉ trường hợp đúng.
 3. Giữ tab hiển thị và thu ít nhất 100 mẫu thống kê sau warmup; tải CSV local.
-4. Lặp lại trên URL Cloud với cùng model, ngưỡng tin cậy và điều kiện camera; ghi cấu hình Cloud, kết nối mạng và vị trí máy chủ nếu biết. Tải CSV Cloud.
+4. Lặp lại trên URL Cloud; ghi rõ runtime/kích thước ảnh trong CSV. Local mặc định PyTorch 640 px và Cloud ONNX 320 px là hai cấu hình khác nhau nên không quy hết chênh lệch thời gian cho mạng. Để so sánh cùng cấu hình, cài requirements-cloud trong môi trường local riêng, đặt `MASK_MODEL_PATH=best.onnx` rồi chạy local bằng cùng ONNX. Ghi cấu hình Cloud, kết nối mạng và vị trí máy chủ nếu biết. Tải CSV Cloud.
 5. Dùng trung bình/P95 trên giao diện hoặc CSV để so sánh ba loại thời gian. Thời gian khởi động có sẵn trong CSV để bàn riêng, không gọi đó là tốc độ ổn định.
 6. Chụp màn hình nhận diện nhiều nhãn và bảng độ trễ trên URL Cloud. Bảng thống kê ít mẫu chỉ là minh họa, không chứng minh hiệu năng chung.
 
@@ -121,5 +121,14 @@ python package_cloud.py
 - 8 kiểm thử Python API/tải model và 5 kiểm thử JavaScript thống kê/luồng giao diện mô phỏng: đạt.
 - Model thật tải thành công, đủ 3 nhãn; suy luận trên 5 ảnh trống: đạt. Các mẫu này không dùng để đánh giá độ chính xác.
 - Giao diện được mở và kiểm tra bố cục trên trình duyệt; chưa hoàn tất thử webcam với người thật.
-- Docker chưa được build vì môi trường hiện tại chưa có Docker. Chưa triển khai Cloud, chưa có số liệu độ trễ Cloud.
+- Bản PyTorch đầu đã deploy lên Render nhưng người dùng báo chậm và 502; log cho thấy instance restart nhiều lần, chưa xác nhận OOM. Bản tối ưu ONNX cần được xác minh sau redeploy. Máy local chưa có Docker để build tại chỗ.
 - Bộ ZIP được đóng gói từ danh sách file cho phép, chứa trọng số, không chứa `.env` hoặc log phát hiện.
+
+## Bản sửa Cloud tiết kiệm bộ nhớ
+
+- Chuyển chính trọng số cũ sang ONNX FP32, cố định đầu vào 320×320, giữ 3 nhãn. File xuất có metadata hash của nguồn và số tham số.
+- Kiểm tra tensor đầu ra ONNX so với PyTorch cùng đầu vào ngẫu nhiên 320 px: khớp trong rtol 0.001, atol 0.01. Đây là kiểm tra chuyển đổi, không chứng minh accuracy khi giảm từ 640 xuống 320.
+- Giảm ảnh gửi xuống rộng tối đa 640 px, JPEG 70%, chỉ gửi tiếp sau khi nhận xong mẫu trước; nghỉ 150 ms.
+- CSV ghi thêm `backend`, `input_size`, `upload_bytes` để phân biệt điều kiện đo.
+- Môi trường local `.venv-cloud` dùng để export và kiểm tra, không đưa vào Git/Docker. Tạo lại model bằng `python export_cloud.py` trong môi trường đã cài Ultralytics, Torch và ONNX.
+- `benchmark_runtime.py --model best.onnx` đo API trên ảnh trống và báo RAM tiến trình; Windows local không thay thế số đo cgroup RAM hoặc độ trễ Render.

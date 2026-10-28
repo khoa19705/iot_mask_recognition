@@ -7,7 +7,7 @@ def main():
     root = Path(__file__).resolve().parent
     files = ["app.py", "start_cloud.py", "requirements.txt", "requirements-cloud.txt",
              "Dockerfile", ".dockerignore", "render.yaml", ".env.example", "README.md",
-             "LAB3.md", "best.pt"]
+             "LAB3.md", "best.pt", "best.onnx", "onnx_detector.py"]
     sources = [root / name for name in files]
     sources += [path for folder in ("templates", "static") for path in (root / folder).rglob("*") if path.is_file()]
     for path in sources:

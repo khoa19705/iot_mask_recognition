@@ -94,6 +94,16 @@ class ApiTests(unittest.TestCase):
         self.assertIn(b'metric-end_to_end_ms', response.data)
         self.assertIn(b'metrics.js', response.data)
 
+    def test_busy_inference_rejected_without_queueing(self):
+        service._request_slot.acquire()
+        try:
+            response = self.post()
+            self.assertEqual(response.status_code, 429)
+            self.assertIn("error", response.json)
+            self.assertEqual(self.client.get("/").status_code, 200)
+        finally:
+            service._request_slot.release()
+
 
 class DownloadTests(unittest.TestCase):
     def test_verified_download_and_reject_mismatch(self):

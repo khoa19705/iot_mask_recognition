@@ -7,6 +7,10 @@ services:
     envVars:
       - key: APP_ENV
         value: cloud
+      - key: MASK_MODEL_PATH
+        value: best.onnx
+      - key: INFERENCE_THREADS
+        value: "1"
       - key: FLASK_DEBUG
         value: "0"
       - key: MAX_UPLOAD_MB

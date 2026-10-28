@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import math
 import os
 import threading
@@ -15,11 +16,7 @@ import cv2
 import numpy as np
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, send_file
-
-try:
-    from ultralytics import YOLO
-except ImportError:  # Keep the UI able to explain a missing dependency.
-    YOLO = None  # type: ignore[assignment,misc]
+from onnx_detector import OnnxDetector
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -36,6 +33,7 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "8")) * 1024 *
 _model: Any = None
 _model_lock = threading.Lock()
 _inference_lock = threading.Lock()
+_request_slot = threading.BoundedSemaphore(1)
 _prediction_count = 0
 _log_lock = threading.Lock()
 _last_log_signature: tuple[int, ...] | None = None
@@ -54,13 +52,15 @@ def get_model() -> Any:
     if _model is not None:
         return _model
     path = _model_path()
-    if YOLO is None:
-        raise RuntimeError("Chưa cài Ultralytics. Hãy chạy: pip install -r requirements.txt")
     if not path.is_file():
         raise RuntimeError(f"Không tìm thấy model tại '{path}'. Hãy đặt file .pt vào đây hoặc cấu hình MASK_MODEL_PATH.")
     with _model_lock:
         if _model is None:
-            _model = YOLO(str(path))
+            if path.suffix.lower() == ".onnx":
+                _model = OnnxDetector(path)
+            else:
+                from ultralytics import YOLO
+                _model = YOLO(str(path))
     return _model
 
 
@@ -86,10 +86,16 @@ def analyze_frame(frame: np.ndarray, confidence: float) -> tuple[list[dict[str, 
         was_loaded = _model is not None
         model = get_model()
         loaded_at = time.perf_counter()
-        result = model.predict(
-            source=frame, conf=confidence, iou=0.45,
-            agnostic_nms=True, verbose=False, device="cpu",
-        )[0]
+        is_onnx = isinstance(model, OnnxDetector)
+        if is_onnx:
+            detections = model.detect(frame, confidence)
+            for detection in detections:
+                detection["category"] = classify_label(detection["label"])
+        else:
+            result = model.predict(
+                source=frame, conf=confidence, iou=0.45,
+                agnostic_nms=True, verbose=False, device="cpu",
+            )[0]
         predicted_at = time.perf_counter()
         cold_start = _prediction_count == 0
         _prediction_count += 1
@@ -99,6 +105,8 @@ def analyze_frame(frame: np.ndarray, confidence: float) -> tuple[list[dict[str, 
         "inference_ms": round((predicted_at - loaded_at) * 1000, 3),
         "cold_start": cold_start,
     }
+    if is_onnx:
+        return detections, timing
     names = result.names
     detections: list[dict[str, Any]] = []
     if result.boxes is None:
@@ -171,7 +179,8 @@ def index():
 @app.get("/api/health")
 def health():
     path = _model_path()
-    ready = path.is_file() and YOLO is not None
+    dependency = "onnxruntime" if path.suffix.lower() == ".onnx" else "ultralytics"
+    ready = path.is_file() and importlib.util.find_spec(dependency) is not None
     return jsonify({"ready": ready, "loaded": _model is not None,
                     "environment": os.getenv("APP_ENV", "local"),
                     "model_file": path.name}), 200 if ready else 503
@@ -186,7 +195,9 @@ def model_info():
         categories = {classify_label(label) for label in labels}
         return jsonify({"labels": labels, "task": model.task,
                         "three_classes_ready": {"mask", "no_mask", "incorrect"} <= categories,
-                        "parameters": sum(p.numel() for p in model.model.parameters()),
+                        "backend": "onnxruntime" if isinstance(model, OnnxDetector) else "pytorch",
+                        "input_size": model.width if isinstance(model, OnnxDetector) else 640,
+                        "parameters": model.parameters if isinstance(model, OnnxDetector) else sum(p.numel() for p in model.model.parameters()),
                         "model_bytes": _model_path().stat().st_size})
     except Exception:
         app.logger.exception("Model inspection failed")
@@ -216,11 +227,16 @@ def detect_webcam_frame():
             raise ValueError()
     except ValueError:
         return jsonify({"error": "Ngưỡng tin cậy phải từ 0.05 đến 0.95."}), 400
+    if not _request_slot.acquire(blocking=False):
+        return jsonify({"error": "Máy chủ đang xử lý ảnh khác. Chỉ bật webcam ở một tab rồi thử lại."}), 429
     try:
-        detections, timing = analyze_frame(frame, confidence)
-    except Exception:
-        app.logger.exception("Inference failed")
-        return jsonify({"error": "Không chạy được model. Kiểm tra trọng số và log máy chủ."}), 503
+        try:
+            detections, timing = analyze_frame(frame, confidence)
+        except Exception:
+            app.logger.exception("Inference failed")
+            return jsonify({"error": "Không chạy được model. Kiểm tra trọng số và log máy chủ."}), 503
+    finally:
+        _request_slot.release()
     logged_event = record_detection_event(detections)
     timing["server_ms"] = round((time.perf_counter() - started_at) * 1000, 3)
     return jsonify({
@@ -231,6 +247,8 @@ def detect_webcam_frame():
         "logged": logged_event is not None,
         "timing": timing,
         "environment": os.getenv("APP_ENV", "local"),
+        "backend": "onnxruntime" if _model_path().suffix.lower() == ".onnx" else "pytorch",
+        "input_size": _model.width if isinstance(_model, OnnxDetector) else 640,
     })
 
 

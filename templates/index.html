@@ -60,7 +60,7 @@
           </tbody>
         </table></div>
         <p id="metric-count">0 mẫu</p><p id="metric-phase"></p>
-        <p class="timing-note">Suy luận gồm tiền xử lý, chạy YOLO và hậu xử lý; tách riêng nạp model. Phản hồi gồm truyền ảnh và xử lý máy chủ. Toàn trình tính từ lấy ảnh đến cơ hội trình duyệt vẽ kết quả, không gồm 600 ms nghỉ giữa hai lần lấy ảnh.</p>
+        <p class="timing-note">Suy luận gồm tiền xử lý, chạy YOLO và hậu xử lý; tách riêng nạp model. Phản hồi gồm truyền ảnh và xử lý máy chủ. Toàn trình tính từ lấy ảnh đến cơ hội trình duyệt vẽ kết quả, không gồm 150 ms nghỉ giữa hai lần lấy ảnh. Cloud ONNX xử lý ở 320 px; khuôn mặt nhỏ có thể khó nhận diện hơn.</p>
         <div class="metrics-actions"><button id="download-metrics" class="download-button" type="button" disabled>Tải số liệu CSV</button><button id="reset-metrics" class="download-button" type="button">Phiên đo mới</button></div>
         <p class="timing-note">Lưu tối đa 10.000 mẫu gần nhất trong tab này. Tải CSV trước khi đóng hoặc tải lại trang. Giữ tab hiển thị khi đo.</p>
       </section>
@@ -88,7 +88,7 @@
     <footer><span>MASKLENS <b>·</b> YOLO VISION</span><span>Khung nhận diện hiển thị trực tiếp trên webcam</span></footer>
   </main>
   <div id="toast" class="toast" role="status"></div>
-  <script src="{{ url_for('static', filename='js/metrics.js', v='1') }}"></script>
-  <script src="{{ url_for('static', filename='js/app.js', v='5') }}"></script>
+  <script src="{{ url_for('static', filename='js/metrics.js', v='2') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js', v='6') }}"></script>
 </body>
 </html>

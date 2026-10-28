@@ -27,7 +27,7 @@
       return result;
     }
     csv() {
-      const columns = ["timestamp", "environment", "width", "height", "confidence_threshold", "objects",
+      const columns = ["timestamp", "environment", "backend", "input_size", "upload_bytes", "width", "height", "confidence_threshold", "objects",
         "inference_ms", "response_ms", "end_to_end_ms", "server_ms", "queue_ms", "model_load_ms", "cold_start", "warmup"];
       const cell = value => `"${String(value ?? "").replace(/"/g, '""')}"`;
       return "\uFEFF" + [columns.join(","), ...this.rows.map(row => columns.map(key => cell(row[key])).join(","))].join("\r\n");
